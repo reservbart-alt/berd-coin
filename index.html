@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Berd Coin</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+    <script src="game.js"></script>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; }
+        #game-container { width: 100%; height: 100vh; }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+
+    <script>
+        // Telegram Web App (имитация, если тестируешь в браузере)
+        if (!window.Telegram?.WebApp) {
+            window.Telegram = { WebApp: {
+                ready: () => console.log('TG WebApp ready'),
+                expand: () => console.log('Expanded'),
+                sendData: (data) => console.log('sendData:', data)
+            }};
+        }
+    </script>
+</body>
+</html>
