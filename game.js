@@ -8,11 +8,46 @@ if (tg) {
 }
 
 // ================================
-// HAPTIC
+// HAPTIC (ВИБРАЦИЯ)
 // ================================
 function hapticTap() {
     if (tg && tg.HapticFeedback) {
-        tg.HapticFeedback.impactOccurred('light');
+        try {
+            tg.HapticFeedback.impactOccurred('light');
+        } catch (e) {
+            // silently ignore
+        }
+    }
+}
+
+// ================================
+// SAVE / LOAD SCORE (CLOUD + FALLBACK)
+// ================================
+function saveScore(value) {
+    if (tg?.CloudStorage) {
+        try {
+            tg.CloudStorage.setItem('score', value.toString());
+        } catch (e) {
+            localStorage.setItem('score', value.toString());
+        }
+    } else {
+        localStorage.setItem('score', value.toString());
+    }
+}
+
+function loadScore(callback) {
+    if (tg?.CloudStorage) {
+        tg.CloudStorage.getItem('score', (err, value) => {
+            if (!err && value !== null) {
+                callback(parseInt(value));
+            } else {
+                const local = localStorage.getItem('score');
+                callback(local ? parseInt(local) : 0);
+            }
+        });
+    } else {
+        const local = localStorage.getItem('score');
+        callback(local ? parseInt(local) : 0);
     }
 }
 
@@ -80,26 +115,25 @@ function create() {
         strokeThickness: 6
     }).setOrigin(0.5, 0);
 
-    // ===== LOAD SCORE =====
-    if (tg?.CloudStorage) {
-        tg.CloudStorage.getItem('score', (err, value) => {
-            if (!err && value) {
-                score = parseInt(value);
-                scoreText.setText(score);
-                updateCoinLevel();
-            }
-        });
-    }
+    // ===== LOAD SAVED SCORE =====
+    loadScore((saved) => {
+        score = saved;
+        scoreText.setText(score);
+        updateCoinLevel();
+    });
 
     // ===== CLICK =====
     coin.on('pointerdown', () => {
+        // вибрация
         hapticTap();
 
+        // логика
         score += 1;
         scoreText.setText(score);
         updateCoinLevel();
+        saveScore(score);
 
-        // animation (safe)
+        // анимация (safe, не ломается)
         this.tweens.killTweensOf(coin);
         this.tweens.add({
             targets: coin,
@@ -115,10 +149,6 @@ function create() {
                 });
             }
         });
-
-        if (tg?.CloudStorage) {
-            tg.CloudStorage.setItem('score', score.toString());
-        }
     });
 }
 
@@ -126,6 +156,8 @@ function create() {
 // COIN LEVEL
 // ================================
 function updateCoinLevel() {
+    if (!coin) return;
+
     if (score >= 10) {
         coin.setTexture('lvl3');
     } else if (score >= 5) {
