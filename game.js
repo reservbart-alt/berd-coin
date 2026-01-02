@@ -54,9 +54,9 @@ function loadGame() {
 function applyOfflineIncome() {
     if (!lastExitTime || autoMining <= 0) return;
 
-    const diff = Math.floor((Date.now() - lastExitTime) / 1000);
-    const max = 6 * 60 * 60;
-    score += Math.min(diff, max) * autoMining;
+    const diffSec = Math.floor((Date.now() - lastExitTime) / 1000);
+    const maxSec = 6 * 60 * 60;
+    score += Math.min(diffSec, maxSec) * autoMining;
 }
 
 // =======================
@@ -71,7 +71,7 @@ function hapticTap() {
 }
 
 // =======================
-// Phaser Config
+// Phaser Init
 // =======================
 new Phaser.Game({
     type: Phaser.AUTO,
@@ -90,9 +90,12 @@ function preload() {
     this.load.image('lvl2', 'assets/lvl2.webp');
     this.load.image('lvl3', 'assets/lvl3.webp');
 
+    // твои иконки
     this.load.image('icon_tap', 'assets/tundra.png');
     this.load.image('icon_energy', 'assets/kasta.png');
     this.load.image('icon_mining', 'assets/benz.png');
+
+    // временные
     this.load.image('icon_coin', 'assets/lvl1.webp');
     this.load.image('icon_game', 'assets/lvl2.webp');
 }
@@ -128,6 +131,7 @@ function create() {
     coin.on('pointerdown', () => {
         if (energy <= 0) return;
         hapticTap();
+
         energy--;
         score += tapPower;
 
@@ -137,7 +141,7 @@ function create() {
         saveGame();
     });
 
-    // energy regen
+    // regen energy
     this.time.addEvent({
         delay: 3000,
         loop: true,
@@ -206,6 +210,7 @@ const getEnergyPrice = () => maxEnergy * 2;
 function createBottomPanel(scene) {
     const w = scene.scale.width;
     const h = scene.scale.height;
+
     const panelH = Math.floor(h * 0.13);
     const panelY = h - panelH;
 
@@ -231,19 +236,20 @@ function createButton(scene, x, y, w, h, btn) {
         .setStrokeStyle(2, 0xffffff)
         .setInteractive();
 
-    const icon = scene.add.image(0, -h * 0.18, btn.icon)
-        .setDisplaySize(h * 0.35, h * 0.35);
+    // 🔥 БОЛЬШАЯ ИКОНКА
+    const icon = scene.add.image(0, -h * 0.12, btn.icon)
+        .setDisplaySize(h * 0.6, h * 0.6);
 
-    const valueText = scene.add.text(0, 0, btn.value(), {
+    const valueText = scene.add.text(0, h * 0.18, btn.value(), {
         fontFamily: 'Luckiest Guy',
         fontSize: Math.floor(h * 0.28) + 'px',
         color: '#ffffff'
     }).setOrigin(0.5);
 
-    const coinIcon = scene.add.image(-h * 0.18, h * 0.25, 'icon_coin')
-        .setDisplaySize(h * 0.25, h * 0.25);
+    const coinIcon = scene.add.image(-h * 0.25, h * 0.42, 'icon_coin')
+        .setDisplaySize(h * 0.32, h * 0.32);
 
-    const priceText = scene.add.text(h * 0.05, h * 0.25, btn.price(), {
+    const priceText = scene.add.text(h * 0.1, h * 0.42, btn.price(), {
         fontFamily: 'Luckiest Guy',
         fontSize: Math.floor(h * 0.22) + 'px',
         color: '#ffffff'
@@ -262,15 +268,27 @@ function createButton(scene, x, y, w, h, btn) {
     bg.on('pointerdown', () => {
         if (score < btn.price()) return;
         hapticTap();
+
         btn.action();
-        scene.tweens.add({ targets: c, scale: 0.95, duration: 80, yoyo: true });
+
+        scene.tweens.add({
+            targets: c,
+            scale: 0.95,
+            duration: 80,
+            yoyo: true
+        });
+
         refresh();
         updateUI();
         updateCoinTexture();
         saveGame();
     });
 
-    scene.time.addEvent({ delay: 500, loop: true, callback: refresh });
+    scene.time.addEvent({
+        delay: 500,
+        loop: true,
+        callback: refresh
+    });
 }
 
 // =======================
