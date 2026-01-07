@@ -1,4 +1,28 @@
 // =======================
+// CONSTS
+// =======================
+const SAVE_KEY = 'berd_save_v1';
+
+// =======================
+// SHOP PRICES (CHANGE ONLY HERE)
+// =======================
+const PRICES = {
+    multitap: (tapPower) => tapPower * 100,
+    automining: (autoMining) => (autoMining + 1) * 200,
+    energy: (maxEnergy) => maxEnergy * 2
+};
+
+// =======================
+// COIN LEVELS (CHANGE HERE)
+// =======================
+function getCoinTextureByScore(score) {
+    if (score < 150) return 'lvl1';
+    if (score < 1000) return 'lvl2';
+    if (score < 5000) return 'lvl3';
+    return 'lvl3';
+}
+
+// =======================
 // Telegram WebApp
 // =======================
 const tg = window.Telegram?.WebApp;
@@ -20,12 +44,15 @@ let lastExitTime = 0;
 let scoreText;
 let energyText;
 let coin;
+let coinBaseSize = 0;
+let currentCoinTexture = 'lvl1';
 
 // =======================
 // Save / Load
 // =======================
 function saveGame() {
-    localStorage.setItem('berd_save', JSON.stringify({
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+        version: 1,
         score,
         tapPower,
         autoMining,
@@ -36,38 +63,17 @@ function saveGame() {
 }
 
 function loadGame() {
-    const data = localStorage.getItem('berd_save');
+    const data = localStorage.getItem(SAVE_KEY);
     if (!data) return;
+    const s = JSON.parse(data);
+    if (s.version !== 1) return;
 
-    const save = JSON.parse(data);
-    score = save.score ?? 0;
-    tapPower = save.tapPower ?? 1;
-    autoMining = save.autoMining ?? 0;
-    energy = save.energy ?? 100;
-    maxEnergy = save.maxEnergy ?? 100;
-    lastExitTime = save.lastExitTime ?? 0;
-}
-
-// =======================
-// Offline Income
-// =======================
-function applyOfflineIncome() {
-    if (!lastExitTime || autoMining <= 0) return;
-
-    const diffSec = Math.floor((Date.now() - lastExitTime) / 1000);
-    const maxSec = 6 * 60 * 60;
-    score += Math.min(diffSec, maxSec) * autoMining;
-}
-
-// =======================
-// Haptic
-// =======================
-function hapticTap() {
-    if (tg?.HapticFeedback) {
-        tg.HapticFeedback.impactOccurred('light');
-    } else if (navigator.vibrate) {
-        navigator.vibrate(15);
-    }
+    score = s.score ?? 0;
+    tapPower = s.tapPower ?? 1;
+    autoMining = s.autoMining ?? 0;
+    energy = s.energy ?? 100;
+    maxEnergy = s.maxEnergy ?? 100;
+    lastExitTime = s.lastExitTime ?? 0;
 }
 
 // =======================
@@ -77,7 +83,7 @@ new Phaser.Game({
     type: Phaser.AUTO,
     width: window.innerWidth,
     height: window.innerHeight,
-    backgroundColor: '#000000',
+    backgroundColor: '#000',
     scene: { preload, create }
 });
 
@@ -86,18 +92,16 @@ new Phaser.Game({
 // =======================
 function preload() {
     this.load.image('bg', 'assets/bg.jpg');
+
     this.load.image('lvl1', 'assets/lvl1.webp');
     this.load.image('lvl2', 'assets/lvl2.webp');
     this.load.image('lvl3', 'assets/lvl3.webp');
 
-    // твои иконки
     this.load.image('icon_tap', 'assets/tundra.png');
-    this.load.image('icon_energy', 'assets/kasta.png');
-    this.load.image('icon_mining', 'assets/benz.png');
-
-    // временные
-    this.load.image('icon_coin', 'assets/lvl1.webp');
-    this.load.image('icon_game', 'assets/lvl2.webp');
+    this.load.image('icon_mining', 'assets/kasta.png');
+    this.load.image('icon_energy', 'assets/benz.png');
+    this.load.image('icon_coin', 'assets/moneta.png');
+    this.load.image('icon_game', 'assets/lvl2.webp'); // mini-game soon
 }
 
 // =======================
@@ -105,45 +109,84 @@ function preload() {
 // =======================
 function create() {
     loadGame();
-    applyOfflineIncome();
 
     const w = this.scale.width;
     const h = this.scale.height;
 
     this.add.image(w / 2, h / 2, 'bg').setDisplaySize(w, h);
 
+    // =======================
+    // SCORE + ICON
+    // =======================
     scoreText = this.add.text(w / 2, 20, score, {
-        fontFamily: 'Luckiest Guy',
         fontSize: Math.floor(w * 0.12) + 'px',
-        color: '#ffffff'
+        color: '#fff'
     }).setOrigin(0.5, 0);
 
-    energyText = this.add.text(w / 2, 100, `⚡ ${energy}/${maxEnergy}`, {
-        fontFamily: 'Luckiest Guy',
+    const scoreIcon = this.add.image(0, 0, 'icon_coin')
+        .setDisplaySize(w * 0.08, w * 0.08);
+
+    function updateScoreIcon() {
+        scoreIcon.x = scoreText.x - scoreText.width / 2 - scoreIcon.displayWidth / 2 - 8;
+        scoreIcon.y = scoreText.y + scoreText.height / 2;
+    }
+    updateScoreIcon();
+
+    const _setScore = scoreText.setText.bind(scoreText);
+    scoreText.setText = (v) => {
+        _setScore(v);
+        updateScoreIcon();
+    };
+
+    // =======================
+    // ENERGY + BENZ
+    // =======================
+    energyText = this.add.text(w / 2, 100, `${energy}/${maxEnergy}`, {
         fontSize: Math.floor(w * 0.05) + 'px',
-        color: '#ffffff'
+        color: '#fff'
     }).setOrigin(0.5, 0);
 
-    coin = this.add.image(w / 2, h / 2, getCoinTexture())
-        .setDisplaySize(Math.min(w, h) * 0.45, Math.min(w, h) * 0.45)
+    const energyIcon = this.add.image(0, 0, 'icon_energy')
+        .setDisplaySize(w * 0.06, w * 0.06);
+
+    function updateEnergyIcon() {
+        energyIcon.x = energyText.x - energyText.width / 2 - energyIcon.displayWidth / 2 - 6;
+        energyIcon.y = energyText.y + energyText.height / 2;
+    }
+    updateEnergyIcon();
+
+    const _setEnergy = energyText.setText.bind(energyText);
+    energyText.setText = (v) => {
+        _setEnergy(v);
+        updateEnergyIcon();
+    };
+
+    // =======================
+    // MAIN COIN
+    // =======================
+    coinBaseSize = Math.min(w, h) * 0.45;
+    currentCoinTexture = getCoinTextureByScore(score);
+
+    coin = this.add.image(w / 2, h / 2, currentCoinTexture)
+        .setDisplaySize(coinBaseSize, coinBaseSize)
         .setInteractive();
 
     coin.on('pointerdown', () => {
         if (energy <= 0) return;
-        hapticTap();
 
         energy--;
         score += tapPower;
 
         animateCoin(this);
-        updateCoinTexture();
         updateUI();
         saveGame();
     });
 
-    // regen energy
+    // =======================
+    // ENERGY REGEN
+    // =======================
     this.time.addEvent({
-        delay: 3000,
+        delay: 500,
         loop: true,
         callback: () => {
             if (energy < maxEnergy) {
@@ -154,55 +197,47 @@ function create() {
         }
     });
 
-    // auto mining
-    this.time.addEvent({
-        delay: 1000,
-        loop: true,
-        callback: () => {
-            if (autoMining > 0) {
-                score += autoMining;
-                updateUI();
-                saveGame();
-            }
-        }
-    });
-
     createBottomPanel(this);
 }
 
 // =======================
-// UI Helpers
+// UI UPDATE
 // =======================
 function updateUI() {
     scoreText.setText(score);
-    energyText.setText(`⚡ ${energy}/${maxEnergy}`);
+    energyText.setText(`${energy}/${maxEnergy}`);
+    updateCoinTexture();
 }
 
+// =======================
+// COIN TEXTURE UPDATE
+// =======================
+function updateCoinTexture() {
+    const newTexture = getCoinTextureByScore(score);
+    if (newTexture !== currentCoinTexture) {
+        currentCoinTexture = newTexture;
+        coin.setTexture(currentCoinTexture);
+    }
+}
+
+// =======================
+// COIN ANIMATION
+// =======================
 function animateCoin(scene) {
+    scene.tweens.killTweensOf(coin);
+
+    coin.displayWidth = coinBaseSize;
+    coin.displayHeight = coinBaseSize;
+
     scene.tweens.add({
         targets: coin,
-        scale: 0.9,
-        duration: 70,
-        yoyo: true
+        displayWidth: coinBaseSize * 0.9,
+        displayHeight: coinBaseSize * 0.9,
+        duration: 80,
+        yoyo: true,
+        ease: 'Sine.easeInOut'
     });
 }
-
-function getCoinTexture() {
-    if (score < 5) return 'lvl1';
-    if (score < 10) return 'lvl2';
-    return 'lvl3';
-}
-
-function updateCoinTexture() {
-    coin.setTexture(getCoinTexture());
-}
-
-// =======================
-// Prices
-// =======================
-const getMultitapPrice = () => tapPower * 100;
-const getAutoMiningPrice = () => (autoMining + 1) * 200;
-const getEnergyPrice = () => maxEnergy * 2;
 
 // =======================
 // Bottom Panel
@@ -210,17 +245,55 @@ const getEnergyPrice = () => maxEnergy * 2;
 function createBottomPanel(scene) {
     const w = scene.scale.width;
     const h = scene.scale.height;
-
     const panelH = Math.floor(h * 0.13);
     const panelY = h - panelH;
 
     scene.add.rectangle(w / 2, panelY + panelH / 2, w, panelH, 0x000000, 0.6);
 
     const buttons = [
-        { icon: 'icon_tap', value: () => `x${tapPower}`, price: getMultitapPrice, action: buyMultitap },
-        { icon: 'icon_mining', value: () => autoMining, price: getAutoMiningPrice, action: buyAutoMining },
-        { icon: 'icon_energy', value: () => maxEnergy, price: getEnergyPrice, action: buyEnergy },
-        { icon: 'icon_game', value: () => '', price: () => Infinity, action: comingSoon }
+        {
+            icon: 'icon_tap',
+            label: () => `x${tapPower}`,
+            price: () => PRICES.multitap(tapPower),
+            action: () => {
+                const p = PRICES.multitap(tapPower);
+                if (score >= p) {
+                    score -= p;
+                    tapPower += 2;
+                }
+            }
+        },
+        {
+            icon: 'icon_mining',
+            label: () => autoMining,
+            price: () => PRICES.automining(autoMining),
+            action: () => {
+                const p = PRICES.automining(autoMining);
+                if (score >= p) {
+                    score -= p;
+                    autoMining++;
+                }
+            }
+        },
+        {
+            icon: 'icon_energy',
+            label: () => maxEnergy,
+            price: () => PRICES.energy(maxEnergy),
+            action: () => {
+                const p = PRICES.energy(maxEnergy);
+                if (score >= p) {
+                    score -= p;
+                    maxEnergy += 50;
+                    energy = maxEnergy;
+                }
+            }
+        },
+        {
+            icon: 'icon_game',
+            label: () => 'soon',
+            price: () => null,
+            action: () => alert('Мини-игра скоро 👀')
+        }
     ];
 
     const bw = w / 4;
@@ -229,6 +302,9 @@ function createBottomPanel(scene) {
     });
 }
 
+// =======================
+// Button
+// =======================
 function createButton(scene, x, y, w, h, btn) {
     const c = scene.add.container(x, y);
 
@@ -236,82 +312,38 @@ function createButton(scene, x, y, w, h, btn) {
         .setStrokeStyle(2, 0xffffff)
         .setInteractive();
 
-    // 🔥 БОЛЬШАЯ ИКОНКА
-    const icon = scene.add.image(0, -h * 0.12, btn.icon)
-        .setDisplaySize(h * 0.6, h * 0.6);
+    const icon = scene.add.image(0, -h * 0.22, btn.icon)
+        .setDisplaySize(h * 0.45, h * 0.45);
 
-    const valueText = scene.add.text(0, h * 0.18, btn.value(), {
-        fontFamily: 'Luckiest Guy',
+    const label = scene.add.text(0, 0, btn.label(), {
         fontSize: Math.floor(h * 0.28) + 'px',
         color: '#ffffff'
     }).setOrigin(0.5);
 
-    const coinIcon = scene.add.image(-h * 0.25, h * 0.42, 'icon_coin')
-        .setDisplaySize(h * 0.32, h * 0.32);
+    c.add([bg, icon, label]);
 
-    const priceText = scene.add.text(h * 0.1, h * 0.42, btn.price(), {
-        fontFamily: 'Luckiest Guy',
-        fontSize: Math.floor(h * 0.22) + 'px',
-        color: '#ffffff'
-    }).setOrigin(0, 0.5);
+    let priceIcon = null;
+    let priceText = null;
 
-    c.add([bg, icon, valueText, coinIcon, priceText]);
+    if (btn.price() !== null) {
+        priceIcon = scene.add.image(-h * 0.18, h * 0.32, 'icon_coin')
+            .setDisplaySize(h * 0.22, h * 0.22);
 
-    function refresh() {
-        valueText.setText(btn.value());
-        priceText.setText(btn.price());
-        bg.setFillStyle(score >= btn.price() ? 0x222222 : 0x555555, score >= btn.price() ? 1 : 0.6);
+        priceText = scene.add.text(h * 0.05, h * 0.32, btn.price(), {
+            fontSize: Math.floor(h * 0.22) + 'px',
+            color: '#ffffff'
+        }).setOrigin(0, 0.5);
+
+        c.add([priceIcon, priceText]);
     }
 
-    refresh();
-
     bg.on('pointerdown', () => {
-        if (score < btn.price()) return;
-        hapticTap();
-
         btn.action();
-
-        scene.tweens.add({
-            targets: c,
-            scale: 0.95,
-            duration: 80,
-            yoyo: true
-        });
-
-        refresh();
+        label.setText(btn.label());
+        if (priceText) priceText.setText(btn.price());
         updateUI();
-        updateCoinTexture();
         saveGame();
     });
-
-    scene.time.addEvent({
-        delay: 500,
-        loop: true,
-        callback: refresh
-    });
-}
-
-// =======================
-// Upgrades
-// =======================
-function buyMultitap() {
-    score -= getMultitapPrice();
-    tapPower += 2;
-}
-
-function buyAutoMining() {
-    score -= getAutoMiningPrice();
-    autoMining++;
-}
-
-function buyEnergy() {
-    score -= getEnergyPrice();
-    maxEnergy += 50;
-    energy = maxEnergy;
-}
-
-function comingSoon() {
-    alert('Мини-игры скоро 👀');
 }
 
 // =======================
